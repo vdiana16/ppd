@@ -1,64 +1,83 @@
 package org.example;
 
-public class LinkedListImpl implements LinkedList {
-    private Node head;
 
+// Requirement 2: Fine-Grain Locking (Hand-over-Hand)
+public class LinkedListImpl implements LinkedList {
+    private final Node head;
+    private final Node tail;
+
+    // Used for Phase 1 output (aggregation)
     public LinkedListImpl() {
-        this.head = null;
+        this.head = new Node(); // Dummy head sentinel (ID: -1, Grade: -1.0)
+        this.tail = new Node(); // Dummy tail sentinel (ID: -1, Grade: -1.0)
+        head.setNext(this.tail);
     }
 
+    // --- Auxiliary Methods for ParallelMethod (Phase 2 Producer) ---
+    public Node getHeadSentinel() { return head; }
+    public Node getTailSentinel() { return tail; }
+    // ------------------------------------------
+
+    @Override
     public Node get() {
-        return head;
+        Node current = null;
+        head.lock();
+        try {
+            current = head.getNext();
+            if (current == tail) return null;
+        } finally {
+            head.unlock();
+        }
+        return current;
     }
 
     @Override
     public boolean isEmpty() {
-        return head == null;
+        head.lock();
+        try {
+            return head.getNext() == tail;
+        } finally {
+            head.unlock();
+        }
     }
 
     @Override
     public void addFirst(int id, double grade) {
         Node newNode = new Node(id, grade);
-        newNode.setNext(head);
-        head = newNode;
+        head.lock();
+        try {
+            newNode.setNext(head.getNext());
+            head.setNext(newNode);
+        } finally {
+            head.unlock();
+        }
     }
 
-    @Override
-    public boolean deleteByID(int id) {
-        if (isEmpty()) {
-            System.out.println("The linked list is empty. Cannot delete ID: " + id);
-            return false;
-        }
-
-        if (head.getId() == id) {
-            head = head.getNext();
-            return true;
-        }
-
-        Node current = head;
-        Node previous = null;
-
-        while (current != null && current.getId() != id) {
-            previous = current;
-            current = current.getNext();
-        }
-
-        if (current != null) {
-            previous.setNext(current.getNext());
-            return true;
-        }
-
-        return false;
-    }
-
+    // Hand-over-hand locking for findByID
     @Override
     public Node findByID(int id) {
-        Node current = head;
-        while (current != null) {
-            if (current.getId() == id) {
-                return current;
+        Node pred = this.head;
+        pred.lock();
+        Node result = null;
+        try {
+            Node curr = pred.getNext();
+            curr.lock();
+            try {
+                while (curr != this.tail) {
+                    if (curr.getId() == id) {
+                        result = curr;
+                        return result;
+                    }
+                    pred.unlock();
+                    pred = curr;
+                    curr = curr.getNext();
+                    curr.lock();
+                }
+            } finally {
+                curr.unlock();
             }
-            current = current.getNext();
+        } finally {
+            pred.unlock();
         }
         return null;
     }

@@ -5,16 +5,18 @@ import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
 
 public class QueueImpl implements Queue {
-    private static final int MAX_CAPACITY = 100;
+    private static final int MAX_CAPACITY = 100; // Requirement 3: Max capacity
 
     private Node head;
     private Node tail;
     private int size;
-    public static final Node POISON_PILL = new Node(-1, -1.0);
+    // Define POISON_PILLs for two-phase termination
+    public static final Node PHASE1_PILL = new Node(-1, -1.0);
+    public static final Node PHASE2_PILL = new Node(-2, -2.0); // New sentinel for Phase 2 termination
 
     private final Lock lock;
-    private final Condition notEmpty;
-    private final Condition notFull;
+    private final Condition notEmpty; // Requirement 4: Condition Variables
+    private final Condition notFull;  // Requirement 4: Condition Variables
 
     public QueueImpl() {
         this.head = null;
@@ -70,7 +72,7 @@ public class QueueImpl implements Queue {
             Node dequeuedNode  = head;
             head = head.getNext();
             size--;
-            dequeuedNode.setNext(null);
+            dequeuedNode.setNext(null); // Detach node from queue
 
             if (isEmpty()) {
                 tail = null;

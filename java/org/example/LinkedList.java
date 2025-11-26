@@ -2,40 +2,36 @@ package org.example;
 
 public interface LinkedList {
     /**
-     * Get the head node of the list.
-     * @return head node.
+     * Obține nodul de început (următorul după santinela de head) al listei.
+     * @return nodul de început.
      */
     Node get();
 
     /**
-     * Add a new node at the beginning of the list.
-     * @param id node's ID.
-     * @param grade node's grade.
+     * Adaugă un nod nou la începutul listei.
+     * Această metodă este folosită în special de ThreadSafeLinkedListImpl pentru
+     * a adăuga rapid noduri la început, fără a menține ordinea.
+     * @param id ID-ul nodului.
+     * @param grade Nota nodului.
      */
     void addFirst(int id, double grade);
 
     /**
-     * Delete a node by its ID.
-     * @param id node's ID to be deleted.
-     * @return true if the node was found and deleted, false otherwise.
-     */
-    boolean deleteByID(int id);
-
-    /**
-     * Check if the list is empty.
-     * @return true if the list is empty, false otherwise.
+     * Verifică dacă lista este goală (conține doar santinele).
+     * @return true dacă lista este goală, false altfel.
      */
     boolean isEmpty();
 
     /**
-     * Search for a node by its ID.
-     * @param id node's ID to search for.
-     * @return the node if found, null otherwise.
+     * Caută un nod după ID-ul său.
+     * Această metodă este crucială pentru faza de agregare (adunarea notelor).
+     * @param id ID-ul nodului de căutat.
+     * @return nodul găsit, sau null dacă nu a fost găsit.
      */
     Node findByID(int id);
 
     /**
-     * Print the linked list.
+     * Afișează lista.
      */
     void printLinkedList();
 }
