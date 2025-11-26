@@ -4,24 +4,20 @@ import java.io.*;
 import java.util.List;
 
 public class SequentialMethod {
-    private LinkedList result;
+    private LinkedList accumulatedResult;
+    private LinkedList sortedResult;
     private List<String> fileNames;
     private String outputFileName;
 
     public SequentialMethod(List<String> fileNames, String outputFileName) {
-        this.result = new LinkedListImpl();
+        this.accumulatedResult = new LinkedListForSeqImpl();
+        this.sortedResult = new LinkedListForSeqImpl();
         this.fileNames = fileNames;
         this.outputFileName = outputFileName;
     }
 
     private void addGrade(int id, double grade) {
-        Node node = result.findByID(id);
-        if (node == null) {
-            result.addFirst(id, grade);
-        } else {
-            double currentGrade = node.getGrade();
-            node.setGrade(currentGrade + grade);
-        }
+        accumulatedResult.addOrUpdateByID(id, grade);
     }
 
     private void processFile(String fileName) {
@@ -41,9 +37,19 @@ public class SequentialMethod {
         }
     }
 
+    private void sortResults () {
+        Node current = accumulatedResult.get();
+        while (current != null) {
+            Node nextNode = current.getNext();
+            current.setNext(null);
+            sortedResult.addSortedByGradeDescending(current);
+            current = nextNode;
+        }
+    }
+
     private void writeToFile() {
         try (BufferedWriter bw = new BufferedWriter(new FileWriter(outputFileName))) {
-            Node current = result.get();
+            Node current = sortedResult.get();
             while (current != null) {
                 bw.write(current.toString());
                 bw.newLine();
@@ -59,6 +65,9 @@ public class SequentialMethod {
         for (String fileName : fileNames) {
             processFile(fileName);
         }
+
+        sortResults();
+
         writeToFile();
     }
 }

@@ -1,66 +1,139 @@
 package org.example;
 
 public class LinkedListImpl implements LinkedList {
-    private Node head;
+    private final Node head;
+    private final Node tail;
 
     public LinkedListImpl() {
         this.head = null;
+        this.tail = null;
+        head.setNext(tail);
     }
 
     public Node get() {
-        return head;
+        return head.getNext() != tail ? head.getNext() : null;
     }
 
     @Override
     public boolean isEmpty() {
-        return head == null;
+        return head.getNext() == tail;
     }
 
     @Override
-    public void addFirst(int id, double grade) {
-        Node newNode = new Node(id, grade);
-        newNode.setNext(head);
-        head = newNode;
+    public void addOrUpdateByID(int id, double grade) {
+        Node predecessor = head;
+        predecessor.getLock().lock();
+        try {
+            Node current = predecessor.getNext();
+            current.getLock().lock();
+            try {
+                while (current != tail) {
+                    if (current.getId() == id) {
+                        double oldGrade = current.getGrade();
+                        current.setGrade(oldGrade + grade);
+                        return;
+                    }
+                    predecessor.getLock().unlock();
+                    predecessor = current;
+                    current = current.getNext();
+                    current.getLock().lock();
+                }
+
+                Node newNode = new Node(id, grade);
+                newNode.setNext(head.getNext());
+                head.setNext(newNode);
+            } finally {
+                if (current != null) {
+                    current.getLock().unlock();
+                }
+            }
+        } finally {
+            if (predecessor != null) {
+                predecessor.getLock().unlock();
+            }
+        }
     }
 
     @Override
-    public boolean deleteByID(int id) {
-        if (isEmpty()) {
-            System.out.println("The linked list is empty. Cannot delete ID: " + id);
-            return false;
+    public void addSortedByGradeDescending(Node newNode) {
+        Node predecessor = head;
+        predecessor.getLock().lock();
+        try {
+            Node current = predecessor.getNext();
+            current.getLock().lock();
+            try {
+                while (current != tail && current.getGrade() >= newNode.getGrade()) {
+                    predecessor.getLock().unlock();
+                    predecessor = current;
+                    current = current.getNext();
+                    current.getLock().lock();
+                }
+
+                newNode.setNext(current);
+                predecessor.setNext(newNode);
+            } finally {
+                if (current != null) {
+                    current.getLock().unlock();
+                }
+            }
+        } finally {
+            if (predecessor != null) {
+                predecessor.getLock().unlock();
+            }
         }
+    }
 
-        if (head.getId() == id) {
-            head = head.getNext();
-            return true;
+    @Override
+    public Node extractFirstNode() {
+        head.getLock().lock();
+        try {
+            Node firstNode = head.getNext();
+            if (firstNode == tail) {
+                return null;
+            }
+
+            firstNode.getLock().lock();
+            try {
+                head.setNext(firstNode.getNext());
+                firstNode.setNext(null);
+                return firstNode;
+            } finally {
+                firstNode.getLock().unlock();
+            }
+        } finally {
+            head.getLock().unlock();
         }
-
-        Node current = head;
-        Node previous = null;
-
-        while (current != null && current.getId() != id) {
-            previous = current;
-            current = current.getNext();
-        }
-
-        if (current != null) {
-            previous.setNext(current.getNext());
-            return true;
-        }
-
-        return false;
     }
 
     @Override
     public Node findByID(int id) {
-        Node current = head;
-        while (current != null) {
-            if (current.getId() == id) {
-                return current;
+        Node predecessor = head;
+        predecessor.getLock().lock();
+        try {
+            Node current = predecessor.getNext();
+            current.getLock().lock();
+            try {
+                while (current != tail) {
+                    if (current.getId() == id) {
+                        current.getLock().unlock();
+                        return current;
+                    }
+                    predecessor.getLock().unlock();
+                    predecessor = current;
+                    current = current.getNext();
+                    current.getLock().lock();
+                }
+                return null;
+            } finally {
+                if (current != null) {
+                    current.getLock().unlock();
+                }
             }
-            current = current.getNext();
+        } finally {
+            if (predecessor != null) {
+                predecessor.getLock().unlock();
+            }
         }
-        return null;
     }
 
     @Override
