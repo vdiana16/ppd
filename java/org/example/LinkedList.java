@@ -8,23 +8,18 @@ public interface LinkedList {
     Node get();
 
     /**
-     * Add a new node to the list, sorted by grade in descending order.
-     * @param newNode the new node to be added.
-     */
-    void addSortedByGradeDescending(Node newNode);
-
-    /**
-     * Add a new node or update an existing node by its ID.
+     * Add a new node at the beginning of the list.
      * @param id node's ID.
-     * @param grade new grade to be set if the node exists.
+     * @param grade node's grade.
      */
-    void addOrUpdateByID(int id, double grade);
+    void addFirst(int id, double grade);
 
     /**
-     * Extract the first head node from the list.
-     * @return the extracted head node.
+     * Delete a node by its ID.
+     * @param id node's ID to be deleted.
+     * @return true if the node was found and deleted, false otherwise.
      */
-    Node extractFirstNode();
+    boolean deleteByID(int id);
 
     /**
      * Check if the list is empty.

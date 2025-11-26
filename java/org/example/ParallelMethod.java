@@ -1,10 +1,10 @@
 package org.example;
 
-import java.io.*;
+import java.io.BufferedWriter;
+import java.io.FileWriter;
+import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicInteger;
 
 public class ParallelMethod {
@@ -15,9 +15,8 @@ public class ParallelMethod {
     private final List<String> fileNames;
     private final String outputFileName;
 
-    private final LinkedList accumulatedResult;
-    private final LinkedList sortedResult;
-    private final Queue sharedQueue;
+    private LinkedList resultList;
+    private UnboundedQueue sharedQueue;
 
     public ParallelMethod(int numberOfThreads, int numberOfReaders, List<String> fileNames, String outputFileName) {
         this.numberOfThreads = numberOfThreads;
@@ -26,9 +25,8 @@ public class ParallelMethod {
         this.fileNames = fileNames;
         this.outputFileName = outputFileName;
 
-        this.accumulatedResult = new LinkedListImpl();
-        this.sortedResult = new LinkedListImpl();
-        this.sharedQueue = new QueueImpl();
+        this.resultList = new ThreadSafeLinkedListImpl();
+        this.sharedQueue = new UnboundedQueueImpl();
     }
 
     /**
@@ -75,7 +73,7 @@ public class ParallelMethod {
      */
     private void writeToFile() {
         try (BufferedWriter bw = new BufferedWriter(new FileWriter(outputFileName, true))) {
-            Node current = sortedResult.get();
+            Node current = resultList.get();
             while (current != null) {
                 bw.write(current.toString());
                 bw.newLine();
@@ -86,92 +84,52 @@ public class ParallelMethod {
         }
     }
 
-    private class ReaderTask implements Runnable {
-        private final String file;
-        private final Queue queue;
-        private final AtomicInteger remainingTasks;
-        private final int workerCount;
-
-        public ReaderTask(String file, Queue queue, AtomicInteger remainingTasks, int workerCount) {
-            this.file = file;
-            this.queue = queue;
-            this.remainingTasks = remainingTasks;
-            this.workerCount = workerCount;
-        }
-
-        @Override
-        public void run() {
-            try (BufferedReader br = new BufferedReader(new FileReader(file))) {
-                String line;
-                while ((line = br.readLine()) != null) {
-                    String[] parts = line.replace("(", "").replace(")", "").split(", ");
-                    int id = Integer.parseInt(parts[0]);
-                    double grade = Double.parseDouble(parts[1]);
-                    queue.enqueue(new Node(id, grade));
-                }
-            } catch (IOException | NumberFormatException e) {
-                System.err.println("Error reading file " + file + ": " + e.getMessage());
-            } finally {
-                if (remainingTasks.decrementAndGet() == 0) {
-                    for (int i = 0; i < workerCount; i++) {
-                        queue.enqueue(QueueImpl.POISON_PILL);
-                    }
-                }
-            }
-        }
-    }
-
     /**
      * Implements parallel processing logic (Method B1).
      */
     public void processingParallel() {
-        // --- Faza 1: Citire (Producător - Thread Pool) și Acumulare (Worker) ---        AtomicInteger activeReaderCount = new AtomicInteger(numberOfReaders);
-        ExecutorService readerExecutor = Executors.newFixedThreadPool(numberOfReaders);
-        AtomicInteger remainingReaderTasks = new AtomicInteger(fileNames.size());
+        //System.out.println("=== Starting Parallel Processing (Readers: " + numberOfReaders + ", Workers: " + numberOfWorkers + ") ===");
 
-        // Trimiterea task-urilor de citire în pool
-        for (String fileName : fileNames) {
-            readerExecutor.submit(new ReaderTask(fileName, sharedQueue, remainingReaderTasks, numberOfWorkers));
-        }
+        AtomicInteger activeReaderCount = new AtomicInteger(numberOfReaders);
 
-        // Thread-urile Worker pentru Faza 1 (Acumulare)
+        List<List<String>> fileAssignments = splitFiles(fileNames, numberOfReaders);
+
+        Thread[] readerThreads = new Thread[numberOfReaders];
         Thread[] workerThreads = new Thread[numberOfWorkers];
 
+        for (int i = 0; i < numberOfReaders; i++) {
+            ReaderThread reader = new ReaderThread(fileAssignments.get(i), sharedQueue, activeReaderCount, numberOfWorkers);
+            reader.setName("Reader-" + (i + 1));
+            readerThreads[i] = reader;
+            reader.start();
+        }
+
         for (int i = 0; i < numberOfWorkers; i++) {
-            WorkerThread worker = new WorkerThread(sharedQueue, accumulatedResult);
-            worker.setName("Worker-Phase1-" + (i + 1));
+            WorkerThread worker = new WorkerThread(sharedQueue, resultList);
+            worker.setName("Worker-" + (i + 1));
             workerThreads[i] = worker;
             worker.start();
         }
 
-        // Așteaptă terminarea tuturor cititorilor
+        // Asteapta ca toti Cititorii sa termine (si sa trimita Poison Pill)
+        for (Thread t : readerThreads) {
+            try {
+                t.join();
+            } catch (InterruptedException e) {
+                throw new RuntimeException(e);
+            }
+        }
+
+        // Asteapta ca toti Lucratorii sa termine (dupa ce au primit Poison Pill)
         for (Thread t : workerThreads) {
             try {
                 t.join();
             } catch (InterruptedException e) {
-                Thread.currentThread().interrupt();
+                throw new RuntimeException(e);
             }
         }
 
-        // --- Faza 2: Sortare (Consumator al listei de acumulare) ---
-        Thread[] sorterThreads = new Thread[numberOfWorkers];
-
-        for (int i = 0; i < numberOfWorkers; i++) {
-            WorkerThread sorter = new WorkerThread(accumulatedResult, sortedResult);
-            sorter.setName("Worker-Phase2-" + (i + 1));
-            sorterThreads[i] = sorter;
-            sorter.start();
-        }
-
-        // Așteaptă terminarea Workerilor din Faza 2
-        for (Thread t : sorterThreads) {
-            try {
-                t.join();
-            } catch (InterruptedException e) {
-                Thread.currentThread().interrupt();
-            }
-        }
-
+        //System.out.println("=== All threads have completed. Writing results to file: " + outputFileName + " ===");
         writeToFile();
     }
 }

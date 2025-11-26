@@ -1,70 +1,42 @@
 package org.example;
 
-import java.util.concurrent.locks.Lock;
-
 public class WorkerThread extends  Thread {
-    private final Queue sharedQueue;
-    private final LinkedList acumulatedResult;
-    private final LinkedList sortedResult;
+    private final UnboundedQueue sharedQueue;
+    private final LinkedList result;
     private volatile boolean keepRunning = true;
 
-    public WorkerThread(Queue sharedQueue, LinkedList acumulatedResult) {
+    public WorkerThread(UnboundedQueue sharedQueue, LinkedList result) {
         this.sharedQueue = sharedQueue;
-        this.acumulatedResult = acumulatedResult;
-        this.sortedResult = null;
-    }
-
-    public WorkerThread(LinkedList acumulatedResult, LinkedList sortedResult) {
-        this.sharedQueue = null;
-        this.acumulatedResult = acumulatedResult;
-        this.sortedResult = sortedResult;
+        this.result = result;
     }
 
     @Override
     public void run() {
-        if (sharedQueue != null) {
-            runAcumulationPhase();
-        } else {
-            runSortingPhase();
-        }
-    }
-
-    private void runAcumulationPhase() {
         while (keepRunning) {
-            Node currentNode = sharedQueue.dequeue();
+            Node currentNode = null;
 
-            if (currentNode == QueueImpl.POISON_PILL) {
+            try {
+                currentNode = sharedQueue.dequeue();
+            } catch (Exception e) {
+                Thread.currentThread().interrupt();
+                return;
+            }
+
+            if (currentNode == UnboundedQueueImpl.POISON_PILL) {
                 sharedQueue.enqueue(currentNode);
                 keepRunning = false;
-                continue;
             }
 
-            Node existingNode = acumulatedResult.findByID(currentNode.getId());
+            Node existingNode = result.findByID(currentNode.getId());
             if (existingNode == null) {
-                acumulatedResult.addOrUpdateByID(currentNode.getId(), currentNode.getGrade());
+                result.addFirst(currentNode.getId(), currentNode.getGrade());
             }
             else {
-                Lock nodeLock = existingNode.getLock();
-                nodeLock.lock();
-                try {
+                synchronized (existingNode) {
                     double newGrade = existingNode.getGrade() + currentNode.getGrade();
                     existingNode.setGrade(newGrade);
-                } finally {
-                    nodeLock.unlock();
                 }
             }
-        }
-    }
-
-    private void runSortingPhase() {
-        while (true) {
-            Node nodeToMove = acumulatedResult.extractFirstNode();
-
-            if (nodeToMove == null) {
-                break;
-            }
-
-            sortedResult.addSortedByGradeDescending(nodeToMove);
         }
     }
 }

@@ -8,7 +8,7 @@ import java.util.Collections;
 
 public class DataGenerator {
 
-    private static final int TOTAL_STUDENTS = 500;
+    private static final int TOTAL_STUDENTS = 200;
     private static final int TOTAL_PROJECTS = 10;
     private static final int MAX_PROJECT_SCORE = 10;
 
@@ -27,7 +27,7 @@ public class DataGenerator {
 
             ArrayList<Integer> submittedIds = new ArrayList<>();
 
-            int currentNumberOfScores = 500;
+            int currentNumberOfScores = 80 + random.nextInt(TOTAL_STUDENTS - 80 + 1);
 
             for (int j = 1; j <= TOTAL_STUDENTS; j++) {
                 submittedIds.add(j);

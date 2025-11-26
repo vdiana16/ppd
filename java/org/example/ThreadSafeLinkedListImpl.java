@@ -1,30 +1,30 @@
 package org.example;
 
-public class LinkedListImpl implements LinkedList {
+public class ThreadSafeLinkedListImpl implements LinkedList {
     private Node head;
 
-    public LinkedListImpl() {
+    public ThreadSafeLinkedListImpl() {
         this.head = null;
     }
 
-    public Node get() {
+    public synchronized Node get() {
         return head;
     }
 
     @Override
-    public boolean isEmpty() {
+    public synchronized boolean isEmpty() {
         return head == null;
     }
 
     @Override
-    public void addFirst(int id, double grade) {
+    public synchronized void addFirst(int id, double grade) {
         Node newNode = new Node(id, grade);
         newNode.setNext(head);
         head = newNode;
     }
 
     @Override
-    public boolean deleteByID(int id) {
+    public synchronized boolean deleteByID(int id) {
         if (isEmpty()) {
             System.out.println("The linked list is empty. Cannot delete ID: " + id);
             return false;
@@ -52,7 +52,7 @@ public class LinkedListImpl implements LinkedList {
     }
 
     @Override
-    public Node findByID(int id) {
+    public synchronized Node findByID(int id) {
         Node current = head;
         while (current != null) {
             if (current.getId() == id) {
@@ -64,7 +64,7 @@ public class LinkedListImpl implements LinkedList {
     }
 
     @Override
-    public void printLinkedList() {
+    public synchronized void printLinkedList() {
         if (isEmpty()) {
             System.out.println("Linked list is empty.");
             return;
