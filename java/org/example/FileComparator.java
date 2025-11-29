@@ -1,38 +1,49 @@
 package org.example;
 
-import java.io.BufferedReader;
-import java.io.FileReader;
-import java.io.IOException;
-import java.util.HashMap;
-import java.util.Map;
+import java.io.*;
+import java.util.*;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 public class FileComparator {
-
-    // Regex to extract ID and Score from the format: ID: 101, Final Score: 95.00
     private static final Pattern RESULT_PATTERN = Pattern.compile("\\s*\\((\\d+),\\s*([0-9.]+)\\)\\s*");
+    private static final double EPSILON = 0.0001;
 
-    /**
-     * Reads a result file and extracts (ID, Score) pairs into a Map.
-     *
-     * @param fileName The name of the file to read.
-     * @return Map<Integer, Double> where the key is the Student ID, and the value is the Final Score.
-     * @throws IOException If there is an error reading the file.
-     */
-    private Map<Integer, Double> readResultsToMap(String fileName) throws IOException {
-        Map<Integer, Double> results = new HashMap<>();
+    private static class Pair {
+        int id;
+        double score;
 
+        Pair(int id, double score) {
+            this.id = id;
+            this.score = score;
+        }
+
+        // Pentru comparare: ID și scor identic (cu toleranță)
+        @Override
+        public boolean equals(Object o) {
+            if (this == o) return true;
+            if (!(o instanceof Pair)) return false;
+            Pair other = (Pair) o;
+            return id == other.id && Math.abs(score - other.score) < EPSILON;
+        }
+
+        @Override
+        public int hashCode() {
+            return Objects.hash(id, (int) Math.round(score * 10000));
+        }
+    }
+
+    private List<Pair> readResultsToList(String fileName) throws IOException {
+        List<Pair> results = new ArrayList<>();
         try (BufferedReader br = new BufferedReader(new FileReader(fileName))) {
             String line;
             while ((line = br.readLine()) != null) {
                 Matcher matcher = RESULT_PATTERN.matcher(line.trim());
-
                 if (matcher.find()) {
                     try {
                         int id = Integer.parseInt(matcher.group(1));
                         double score = Double.parseDouble(matcher.group(2));
-                        results.put(id, score);
+                        results.add(new Pair(id, score));
                     } catch (NumberFormatException e) {
                         System.err.println("Skipping malformed line in " + fileName + ": " + line);
                     }
@@ -43,64 +54,66 @@ public class FileComparator {
     }
 
     /**
-     * Compares the results from two files, ignoring the order.
-     * This method is used to verify the integrity of parallel processing against sequential results.
-     *
-     * @param sequentialFile The path to the file with sequential results.
-     * @param parallelFile The path to the file with parallel results.
-     * @return true if both sets of results (ID-Score pairs) are identical, false otherwise.
+     * Compară două fișiere: ordinea contează EXCEPTÂND blocurile de note egale
      */
     public boolean compareFiles(String sequentialFile, String parallelFile) {
-        Map<Integer, Double> sequentialResults;
-        Map<Integer, Double> parallelResults;
-
+        List<Pair> seqList, parList;
         try {
-            sequentialResults = readResultsToMap(sequentialFile);
-            parallelResults = readResultsToMap(parallelFile);
+            seqList = readResultsToList(sequentialFile);
+            parList = readResultsToList(parallelFile);
         } catch (IOException e) {
             System.err.println("Error reading files: " + e.getMessage());
             return false;
         }
-
-        //System.out.println("--- Comparison Report ---");
-        //System.out.println("Sequential records found: " + sequentialResults.size());
-        //System.out.println("Parallel records found: " + parallelResults.size());
-
-        // 1. Compare total record count
-        if (sequentialResults.size() != parallelResults.size()) {
-            System.err.println("FAILURE: Mismatch in total number of records.");
+        if (seqList.size() != parList.size()) {
+            System.err.println("FAILURE: Different number of records");
             return false;
         }
 
-        // 2. Compare each ID-Score pair
+        int n = seqList.size();
+        int i = 0;
         int errors = 0;
-        final double EPSILON = 0.0001; // Tolerance for floating-point comparison
 
-        for (Map.Entry<Integer, Double> seqEntry : sequentialResults.entrySet()) {
-            int id = seqEntry.getKey();
-            double seqScore = seqEntry.getValue();
+        while (i < n) {
+            double currentScore = seqList.get(i).score;
+            // Găsește lungimea blocului cu același scor în seqList
+            int j = i + 1;
+            while (j < n && Math.abs(seqList.get(j).score - currentScore) < EPSILON)
+                j++;
 
-            if (!parallelResults.containsKey(id)) {
-                //System.err.println("FAILURE: Student ID " + id + " found in sequential but missing in parallel.");
+            // Găsește lungimea blocului cu același scor în parList (presupunem secvențele ar trebui să se potrivească, altfel e eroare)
+            int k = i + 1;
+            double parScore = parList.get(i).score;
+            if (Math.abs(parScore - currentScore) > EPSILON) {
+                System.err.printf("Blocat scor diferit pe poziția %d: %.2f vs %.2f\n", i+1, currentScore, parScore);
                 errors++;
-                continue;
+                break;
             }
+            while (k < n && Math.abs(parList.get(k).score - parScore) < EPSILON)
+                k++;
 
-            double parScore = parallelResults.get(id);
-
-            // Compare scores with tolerance
-            if (Math.abs(seqScore - parScore) > EPSILON) {
-                //System.err.printf("FAILURE: Score mismatch for ID %d. Sequential: %.2f, Parallel: %.2f\n", id, seqScore, parScore);
+            // Dacă numărul de participanți cu același scor nu este egal, eroare
+            if ((j - i) != (k - i)) {
+                System.err.printf("Blocuri cu scor %.2f de dimensiuni diferite: %d vs %d\n", currentScore, (j-i), (k-i));
                 errors++;
+            } else {
+                // Comparăm ca set/multime conținutul acestui bloc, nu ca secvență
+                Set<Pair> set1 = new HashSet<>(seqList.subList(i, j));
+                Set<Pair> set2 = new HashSet<>(parList.subList(i, k));
+                if (!set1.equals(set2)) {
+                    System.err.printf("Bloc cu scor %.2f diferit - seturi de participanți nu coincid!\n", currentScore);
+                    errors++;
+                }
             }
+            // Avansăm la următorul bloc
+            i = j;
         }
 
-        // 3. Final Result
         if (errors == 0) {
-            System.out.println("SUCCESS: All " + sequentialResults.size() + " records match perfectly (order ignored).");
+            System.out.println("SUCCESS: All records match, order is correct (except among equal scores).");
             return true;
         } else {
-            System.err.println("TOTAL FAILURES: " + errors + " mismatches found.");
+            System.err.println("TOTAL FAILURES: " + errors);
             return false;
         }
     }

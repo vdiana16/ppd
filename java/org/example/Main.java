@@ -37,7 +37,7 @@ public class Main {
         long end_time = System.nanoTime();
 
         FileComparator comparator = new FileComparator();
-        //comparator.compareFiles(outputFileNameSeq, outputFileNamePar);
+        comparator.compareFiles(outputFileNameSeq, outputFileNamePar);
 
         System.out.println((double) (end_time - start_time) / 1E6); //ms
 
